@@ -4245,13 +4245,12 @@ impl DocumentMethods for Document {
         }
 
         // Step 9
-        if let Some(window) = self.global().downcast::<Window>() {
-            if window.Document() == DomRoot::from_ref(self) {
-                self.global().upcast::<EventTarget>().remove_all_listeners()
-            }
+        if self.window == DomRoot::from_ref(self) {
+            self.window.upcast::<EventTarget>().remove_all_listeners();
         }
 
         // Step 10.
+        // TODO: Should replace all without firing mutation events. See #21936
         Node::replace_all(None, self.upcast::<Node>());
 
         // Step 11
@@ -4292,16 +4291,11 @@ impl DocumentMethods for Document {
 
     // https://html.spec.whatwg.org/multipage/#dom-document-open-window
     fn Open_(&self, url: DOMString, target: DOMString, features: DOMString) -> Fallible<DomRoot<WindowProxy>> {
-        let wo = match self.browsing_context() {
-            Some(w) => w.open(url, target, features),
-            None => return Err(Error::InvalidAccess),
-        };
         // WhatWG spec states this should always return a WindowProxy, but the spec for WindowProxy.open states
         // it optionally returns a WindowProxy. Assume an error if window.open returns none.
-        match wo {
-            Some(w) => Ok(w),
-            None => Err(Error::InvalidAccess),
-        }
+        // See https://github.com/whatwg/html/issues/4091
+        let context = self.browsing_context().ok_or(Error::InvalidAccess)?;
+        context.open(url, target, features).ok_or(Error::InvalidAccess)
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-document-write
